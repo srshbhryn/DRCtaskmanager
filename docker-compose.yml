@@ -1,0 +1,55 @@
+version: '3'
+
+services:
+  taskmanager:
+    container_name: taskmanager
+    build: ./taskmanager
+    ports:
+      - "8000:8000"
+    volumes:
+      - admin_static:/src/static/
+    command: gunicorn --workers=2 --bind=0.0.0.0:8000 taskmanager.wsgi:application
+    env_file:
+      - taskmanager.env
+
+  nginx:
+    image: nginx
+    container_name: ngx_tm
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - admin_static:/opt/admin_static/
+    depends_on:
+      - taskmanager
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+
+  celery:
+    restart: always
+    container_name: celery
+    build: ./taskmanager
+    command: celery -A taskmanager worker -l info -Q celery,high
+    env_file:
+      - ./celery.env
+    depends_on:
+      - redis
+      - taskmanager
+
+  celerybeat:
+    restart: always
+    container_name: celerybeat
+    build: ./taskmanager
+    command: celery -A taskmanager beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file:
+      - ./celery.env
+    depends_on:
+      - redis
+      - taskmanager
+
+volumes:
+  admin_static:
+  mysqldata:
